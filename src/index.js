@@ -1,12 +1,12 @@
 const http = require('http');
 const { request: httpRequest } = require('http');
 const { URL } = require('url');
+const net = require('net');
 
 const PORT = process.env.PORT || 3003;
-const TARGET = new URL('http://localhost:1337'); // Change to your real target
+const TARGET = new URL('http://localhost:1337'); // Your target server
 
 const server = http.createServer((clientReq, clientRes) => {
-    
     const url = new URL(clientReq.url, TARGET.origin);
 
     const options = {
@@ -17,7 +17,7 @@ const server = http.createServer((clientReq, clientRes) => {
         path: url.pathname + url.search,
         headers: {
             ...clientReq.headers,
-            host: TARGET.hostname, // simulate changeOrigin
+            host: TARGET.hostname, // Simulate changeOrigin
         },
     };
 
@@ -37,31 +37,55 @@ const server = http.createServer((clientReq, clientRes) => {
     });
 
     clientReq.pipe(proxyReq, { end: true });
+
 });
 
+// Handle CONNECT requests
+server.on('connect', (req, clientSocket, head) => {
 
-server.on('error', (req, socket, head) => {
-    console.log(`Handling ERROR for: ${req.url}`);
-});
-
-server.on('upgrade', function (req, socket, head) {
-    console.log(`Handling UPGRADE for: ${req.url}`);
-});
-
-server.on('connect', (req, socket, head) => {
     console.log(`Handling CONNECT for: ${req.url}`);
+
+    const { port, hostname } = new URL(`http://${req.url}`); // Parse the requested host and port
+
+    console.log(`Connecting to ${hostname}:${port}...`);
+
+    const serverSocket = net.connect(port || 80, hostname, () => {
+
+        console.log('Connected');
+
+        clientSocket.write('HTTP/1.1 200 Connection Established\r\n\r\n'); // Signal success to client
+
+        serverSocket.write(head); // Forward any initial data
+
+        serverSocket.pipe(clientSocket); // Pipe data from target to client
+        clientSocket.pipe(serverSocket); // Pipe data from client to target
+
+    });
+
+    serverSocket.on('error', (err) => {
+
+        console.error(`Server socket error: ${err.message}`);
+
+        clientSocket.end('HTTP/1.1 500 Internal Server Error\r\n\r\n');
+
+    });
+
+    clientSocket.on('error', (err) => {
+
+        console.error(`Client socket error: ${err.message}`);
+
+        serverSocket.end();
+
+    });
 });
 
-server.on('end', (req, socket, head) => {
-    console.log(`Handling END for: ${req.url}`);
+server.on('error', (err) => {
+    console.log(`Server error: ${err.message}`);
 });
 
-server.on('close', (req, socket, head) => {
-    console.log(`Handling CLOSE for: ${req.url}`);
-});
-
-server.on('data', (req, socket, head) => {
-    console.log(`Handling DATA for: ${req.url}`);
+server.on('upgrade', (req, socket, head) => {
+    console.log(`Handling UPGRADE for: ${req.url}`);
+    // Add WebSocket handling here if needed
 });
 
 server.listen(PORT, () => {
