@@ -1,26 +1,44 @@
-const express = require('express');
-const { createProxyMiddleware } = require('http-proxy-middleware');
+const http = require('http');
+const { request: httpRequest } = require('http');
+const { URL } = require('url');
 
-const app = express();
 const PORT = process.env.PORT || 3003;
-// const TARGET = 'https://jsonplaceholder.typicode.com';
-const TARGET = 'http://localhost:1337';
+const TARGET = new URL('http://localhost:1337'); // Change to your real target
 
-app.use(createProxyMiddleware({
-    target: TARGET,
-    changeOrigin: true,
-    logLevel: 'debug',
-    onProxyReq: (proxyReq, req, res) => {
-        console.log(`>>> Proxying: ${req.method} ${req.originalUrl}`);
-    },
-    onProxyRes: (proxyRes, req, res) => {
-        console.log(`<<< Response: ${proxyRes.statusCode} for ${req.method} ${req.originalUrl}`);
-    },
-    onError: (err, req, res) => {
-        console.error(`!!! Error: "${err.message}" while proxying ${req.method} ${req.originalUrl}`);
-    }
-}));
+const server = http.createServer((clientReq, clientRes) => {
+    
+    const url = new URL(clientReq.url, TARGET.origin);
 
-app.listen(PORT, () => {
-    console.log(`Proxy server running at http://localhost:${PORT} and forwarding to ${TARGET}`);
+    const options = {
+        protocol: TARGET.protocol,
+        hostname: TARGET.hostname,
+        port: TARGET.port,
+        method: clientReq.method,
+        path: url.pathname + url.search,
+        headers: {
+            ...clientReq.headers,
+            host: TARGET.hostname, // simulate changeOrigin
+        },
+    };
+
+    console.log(`>>> Proxying: ${clientReq.method} ${clientReq.url}`);
+
+    const proxyReq = httpRequest(options, (proxyRes) => {
+        clientRes.writeHead(proxyRes.statusCode, proxyRes.headers);
+        proxyRes.pipe(clientRes, { end: true });
+
+        console.log(`<<< Response: ${proxyRes.statusCode} for ${clientReq.method} ${clientReq.url}`);
+    });
+
+    proxyReq.on('error', (err) => {
+        console.error(`!!! Error: "${err.message}" while proxying ${clientReq.method} ${clientReq.url}`);
+        clientRes.writeHead(500);
+        clientRes.end('Proxy error');
+    });
+
+    clientReq.pipe(proxyReq, { end: true });
+});
+
+server.listen(PORT, () => {
+    console.log(`Proxy server running at http://localhost:${PORT} and forwarding to ${TARGET.href}`);
 });
