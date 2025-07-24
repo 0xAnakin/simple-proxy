@@ -39,6 +39,31 @@ const server = http.createServer((clientReq, clientRes) => {
     clientReq.pipe(proxyReq, { end: true });
 });
 
+
+server.on('error', (req, socket, head) => {
+    console.log(`Handling ERROR for: ${req.url}`);
+});
+
+server.on('upgrade', function (req, socket, head) {
+    console.log(`Handling UPGRADE for: ${req.url}`);
+});
+
+server.on('connect', (req, socket, head) => {
+    console.log(`Handling CONNECT for: ${req.url}`);
+});
+
+server.on('end', (req, socket, head) => {
+    console.log(`Handling END for: ${req.url}`);
+});
+
+server.on('close', (req, socket, head) => {
+    console.log(`Handling CLOSE for: ${req.url}`);
+});
+
+server.on('data', (req, socket, head) => {
+    console.log(`Handling DATA for: ${req.url}`);
+});
+
 server.listen(PORT, () => {
     console.log(`Proxy server running at http://localhost:${PORT} and forwarding to ${TARGET.href}`);
 });
